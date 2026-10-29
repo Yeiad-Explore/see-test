@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Attention Test</title>
+<style>
+  :root { --bg:#f3f4f1; --card:#fff; --ink:#1b1b1b; --mute:#65655f; --line:#d6d8d2; --accent:#1f6f50; --on:#fff; --bad:#b3261e; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111; --card:#1b1b1b; --ink:#f2f2ee; --mute:#9a9a94; --line:#333; --accent:#5fcf9f; --on:#111; --bad:#ff8a80; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.45 system-ui, sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); }
+  .hd { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .hd b { display:block; line-height:1.2; } .hd small { color:var(--mute); }
+  #timer { font:600 1.3rem ui-monospace, monospace; padding:6px 12px; border-radius:8px; border:2px solid var(--line); }
+  #timer.low { color:var(--bad); border-color:var(--bad); }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  h1 { font-size:1.35rem; margin:0 0 6px; } h2 { font-size:1.1rem; margin:18px 0 6px; }
+  p, li { color:var(--mute); } li { margin:4px 0; } ul { padding-left:20px; margin:6px 0 14px; }
+  input, button { font:inherit; border-radius:10px; border:2px solid var(--line); background:transparent; color:var(--ink); }
+  input { width:100%; padding:14px; }
+  button { padding:12px 18px; min-height:50px; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--on); font-weight:600; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.on { border-color:var(--accent); box-shadow:inset 0 0 0 2px var(--accent); }
+  .err { color:var(--bad); min-height:1.4em; margin:6px 0; }
+  nav { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  nav button { min-height:40px; min-width:40px; padding:4px 8px; font-size:.9rem; font-weight:600; }
+  nav .done { background:color-mix(in srgb, var(--accent) 22%, transparent); border-color:var(--accent); }
+  nav .cur { box-shadow:0 0 0 3px var(--ink); }
+  .meta { color:var(--mute); font-size:.9rem; margin-bottom:4px; }
+  .pic { position:relative; touch-action:manipulation; user-select:none; margin-top:10px; cursor:crosshair; }
+  .pic img { width:100%; display:block; border-radius:10px; background:#fff; min-height:150px; }
+  .dot { position:absolute; width:64px; height:64px; margin:-32px 0 0 -32px; border:4px solid var(--accent); border-radius:50%; background:color-mix(in srgb, var(--accent) 25%, transparent); pointer-events:none; }
+  .row { display:flex; gap:10px; margin-top:14px; } .row > * { flex:1; }
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:14px 0 0; }
+  .grid button { padding:8px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .grid .num { font-size:1.1rem; min-width:1.6em; text-align:right; }
+  .grid svg { width:64px; height:64px; fill:none; stroke:var(--ink); stroke-width:4; stroke-linejoin:round; }
+  .grid .on svg { fill:color-mix(in srgb, var(--accent) 30%, transparent); stroke:var(--accent); }
+  .rev { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
+  .rev span.no { color:var(--bad); font-weight:600; } .rev span.ok { color:var(--accent); font-weight:600; }
+  .rev button { min-height:36px; padding:4px 12px; }
+  .center { text-align:center; padding:40px 18px; }
+</style>
+</head>
+<body>
+<header id="hd" hidden><div class="hd"><div><b id="title"></b><small id="who"></small></div><div id="timer" role="timer" aria-live="off">--:--</div></div></header>
+<main id="app"></main>
+<script>
+const $ = (s) => document.querySelector(s);
+const app = $('#app');
+const KEY = 'seetest';
+const SHAPES = {
+  A: '<polygon points="50,21 82,40 50,78 17,40"/>',
+  B: '<polygon points="19,18 81,18 81,49 50,49 19,81"/>',
+  C: '<polygon points="29,46 71,18 71,53 29,82"/>',
+  square: '<rect x="20" y="20" width="60" height="60"/>',
+  triangle: '<polygon points="50,15 88,82 12,82"/>',
+  hexagon: '<polygon points="50,10 86,30 86,70 50,90 14,70 14,30"/>',
+  pentagon: '<polygon points="50,10 90,40 75,88 25,88 10,40"/>',
+  circle: '<circle cx="50" cy="50" r="36"/>',
+  star: '<polygon points="50,8 61,38 93,38 67,57 77,89 50,70 23,89 33,57 7,38 39,38"/>',
+  oval: '<ellipse cx="50" cy="50" rx="42" ry="26"/>',
+  cross: '<polygon points="38,10 62,10 62,38 90,38 90,62 62,62 62,90 38,90 38,62 10,62 10,38 38,38"/>',
+  trapezoid: '<polygon points="30,28 70,28 90,72 10,72"/>',
+};
+
+// Each student sees the questions in their own order (seeded by ID, so a reload keeps it).
+function rng(seed) {
+  let h = 1779033703;
+  for (const c of seed) { h = Math.imul(h ^ c.charCodeAt(0), 3432918353); h = (h << 13) | (h >>> 19); }
+  return () => { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
+}
+const shuffle = (a, r) => { a = [...a]; for (let i = a.length; i > 1;) { const j = Math.floor(r() * i--); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+let S = { token: null, cur: 0, answers: { objects: {}, shapes: [] } };
+let Q, items, shapeOptions, endAt, tick, submitting = false;
+const store = (v) => { try { v === null ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, JSON.stringify(v)); } catch {} };
+const save = () => store({ token: S.token, cur: S.cur, answers: S.answers });
+const load0 = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } };
+
+async function call(url, body) {
+  const r = await fetch(url, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'content-type': 'application/json', 'x-token': S.token || '' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.error || 'Something went wrong. Try again.'), { status: r.status });
+  return data;
+}
+
+function loginScreen(msg = '') {
+  $('#hd').hidden = true;
+  app.innerHTML = `<div class="card">
+    <h1>Visual Attention Test</h1><p>Read this, then enter your student ID to begin.</p>
+    <h2>Before you start</h2>
+    <ul>
+      <li><b>The timer starts when you press Start</b> and cannot be paused.</li>
+      <li>Each student ID can log in <b>only once</b>. If the page closes, reopen it on the same device to continue.</li>
+      <li>9 picture questions: tap the object if you can see it. If it is not in the picture, press the “No …” button.</li>
+      <li>1 shape question: tap every shape that is hidden in the drawing.</li>
+      <li>You can go back and change answers until you submit.</li>
+    </ul>
+    <label for="id"><b>Student ID</b></label>
+    <input id="id" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. 2301045">
+    <p class="err" id="err" role="alert">${msg}</p>
+    <button class="primary" id="go" style="width:100%">Log in</button></div>`;
+  $('#id').focus();
+  const go = async () => {
+    $('#go').disabled = true;
+    try {
+      S = { token: (await call('/api/login', { id: $('#id').value })).token, cur: 0, answers: { objects: {}, shapes: [] } };
+      save();
+      start();
+    } catch (e) { loginScreen(e.message); }
+  };
+  $('#go').onclick = go;
+  $('#id').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+}
+
+async function start() {
+  try { Q = await call('/api/questions'); }
+  catch (e) { store(null); return loginScreen(e.status === 401 ? '' : e.message); }
+  if (Q.submitted) return done();
+  const id = S.token.split('.')[0];
+  if (Q.notStarted) return readyScreen(id, Q.minutes);
+  const r = rng(id);
+  items = [...shuffle(Q.objects, r).map((q) => ({ q })), { shape: true }];
+  shapeOptions = shuffle(Q.shapes.options, r);
+  endAt = Date.now() + Q.remaining * 1000;
+  $('#title').textContent = Q.title; $('#who').textContent = 'Student ID: ' + id; $('#hd').hidden = false;
+  clearInterval(tick); tick = setInterval(clock, 500); clock();
+  window.onbeforeunload = (e) => { if (!submitting) { e.preventDefault(); e.returnValue = ''; } };
+  S.cur = Math.min(S.cur, items.length);
+  render();
+}
+
+function readyScreen(id, minutes, msg = '') {
+  app.innerHTML = `<div class="card center"><h1>You are logged in</h1><p>Student ID: <b>${id}</b></p>
+    <p>You have <b>${minutes} minutes</b>. The timer starts when you press Start.</p>
+    <p class="err" id="err" role="alert">${msg}</p>
+    <button class="primary" id="begin" style="width:100%">Start test</button></div>`;
+  $('#begin').onclick = async () => {
+    $('#begin').disabled = true;
+    try { await call('/api/start', {}); start(); } catch (e) { readyScreen(id, minutes, e.message); }
+  };
+}
+
+function clock() {
+  const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+  const t = $('#timer');
+  t.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+  t.classList.toggle('low', left <= 60);
+  if (left === 0 && !submitting) submit(true);
+}
+
+const answered = (i) => items[i].shape ? S.answers.shapes.length > 0 : !!S.answers.objects[items[i].q.id];
+const go = (i) => { S.cur = i; save(); render(); window.scrollTo(0, 0); };
+
+function navHtml() {
+  return `<nav aria-label="Questions">${items.map((_, i) =>
+    `<button data-i="${i}" class="${answered(i) ? 'done' : ''} ${i === S.cur ? 'cur' : ''}" aria-label="Question ${i + 1}${answered(i) ? ', answered' : ''}">${i + 1}</button>`).join('')}
+    <button data-i="${items.length}" class="${S.cur === items.length ? 'cur' : ''}" aria-label="Review">✓</button></nav>`;
+}
+function wireNav() { document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => go(+b.dataset.i))); }
+
+function render() {
+  if (S.cur >= items.length) return review();
+  const it = items[S.cur], last = S.cur === items.length - 1;
+  app.innerHTML = `${navHtml()}<div class="card"><div class="meta">Question ${S.cur + 1} of ${items.length}</div>
+    <div id="body"></div>
+    <div class="row"><button id="back" ${S.cur ? '' : 'disabled'}>Back</button>
+    <button id="next" class="primary">${last ? 'Review answers' : 'Next'}</button></div></div>`;
+  wireNav();
+  it.shape ? shapeQ() : objectQ(it.q);
+  $('#back').onclick = () => go(S.cur - 1);
+  $('#next').onclick = () => go(S.cur + 1);
+}
+
+function objectQ(q) {
+  $('#body').innerHTML = `<h1>Can you see the ${q.object}?</h1><p>Tap the ${q.object} in the picture. If there is no ${q.object}, press “No ${q.object}”.</p>
+    <div class="pic"><img src="${q.img}" alt="Picture ${S.cur + 1}" draggable="false"></div>
+    <div class="row"><button id="none">No ${q.object}</button></div>`;
+  const pic = $('.pic'), img = $('.pic img'), a = () => S.answers.objects[q.id];
+  const mark = (x, y) => {
+    pic.querySelectorAll('.dot').forEach((d) => d.remove());
+    const d = document.createElement('div');
+    d.className = 'dot'; d.style.left = x + 'px'; d.style.top = y + 'px';
+    pic.append(d);
+  };
+  const showSaved = () => { if (a() && !a().none) mark(a().x * img.clientWidth, a().y * img.clientWidth); };
+  $('#none').classList.toggle('on', !!(a() && a().none));
+  showSaved(); img.onload = showSaved;
+  pic.onclick = (e) => {
+    const r = img.getBoundingClientRect();
+    S.answers.objects[q.id] = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.width };
+    $('#none').classList.remove('on'); mark(e.clientX - r.left, e.clientY - r.top); save(); refreshNav();
+  };
+  $('#none').onclick = () => {
+    S.answers.objects[q.id] = { none: true };
+    pic.querySelectorAll('.dot').forEach((d) => d.remove());
+    $('#none').classList.add('on'); save(); refreshNav();
+  };
+}
+
+function shapeQ() {
+  $('#body').innerHTML = `<h1>Which shape can you see?</h1><p>Some of the shapes below are hidden in the drawing. Tap every one you can find. Tap again to undo.</p>
+    <div class="pic" style="cursor:default"><img src="${Q.shapes.img}" alt="Drawing with hidden shapes" draggable="false"></div>
+    <div class="grid">${shapeOptions.map((s, i) => `<button data-s="${s}" aria-label="Shape ${i + 1}" aria-pressed="${S.answers.shapes.includes(s)}" class="${S.answers.shapes.includes(s) ? 'on' : ''}">
+      <b class="num" aria-hidden="true">${i + 1}.</b><svg viewBox="0 0 100 100" aria-hidden="true">${SHAPES[s]}</svg></button>`).join('')}</div>`;
+  document.querySelectorAll('.grid button').forEach((b) => {
+    b.onclick = () => {
+      const s = b.dataset.s, i = S.answers.shapes.indexOf(s);
+      i < 0 ? S.answers.shapes.push(s) : S.answers.shapes.splice(i, 1);
+      b.classList.toggle('on'); b.setAttribute('aria-pressed', i < 0); save(); refreshNav();
+    };
+  });
+}
+
+function refreshNav() {
+  document.querySelectorAll('nav button').forEach((b, i) => { if (i < items.length) b.classList.toggle('done', answered(i)); });
+}
+
+function review() {
+  const missing = items.filter((_, i) => !answered(i)).length;
+  app.innerHTML = `${navHtml()}<div class="card"><h1>Review your answers</h1>
+    <p>${missing ? `<b style="color:var(--bad)">${missing} question${missing > 1 ? 's' : ''} not answered.</b> You can still go back.` : 'All questions are answered.'}</p>
+    ${items.map((_, i) => `<div class="rev"><span>Question ${i + 1}</span><span class="${answered(i) ? 'ok' : 'no'}">${answered(i) ? 'Answered' : 'Not answered'}</span><button data-i="${i}">Open</button></div>`).join('')}
+    <p class="err" id="err" role="alert"></p>
+    <div class="row"><button id="back">Back</button><button id="submit" class="primary">Submit test</button></div></div>`;
+  wireNav();
+  document.querySelectorAll('.rev button').forEach((b) => (b.onclick = () => go(+b.dataset.i)));
+  $('#back').onclick = () => go(items.length - 1);
+  $('#submit').onclick = () => {
+    $('#submit').outerHTML = '<button id="sure" class="primary">Yes, submit. I cannot change it after.</button>';
+    $('#sure').onclick = () => submit(false);
+  };
+}
+
+async function submit(auto) {
+  submitting = true;
+  app.innerHTML = `<div class="card center"><h1>${auto ? 'Time is up' : 'Submitting'}</h1><p>Saving your answers. Do not close this page.</p><p class="err" id="err" role="alert"></p></div>`;
+  for (let n = 0; n < 5; n++) {
+    try { await call('/api/submit', S.answers); return done(); }
+    catch (e) {
+      if (e.status === 409 || e.status === 401) return done(); // already saved
+      $('#err').textContent = 'No connection. Trying again…';
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  submitting = false;
+  app.innerHTML = '<div class="card center"><h1>Not saved yet</h1><p>Check your connection, then press the button.</p><button class="primary" id="retry">Try again</button></div>';
+  $('#retry').onclick = () => submit(auto);
+}
+
+function done() {
+  clearInterval(tick); window.onbeforeunload = null; store(null);
+  $('#hd').hidden = true;
+  app.innerHTML = '<div class="card center"><h1>Test submitted</h1><p>Thank you. Your answers have been saved. You can close this page.</p></div>';
+}
+
+const saved = load0();
+if (saved && saved.token) { S = { ...S, ...saved }; start(); } else loginScreen();
+</script>
+</body>
+</html>
