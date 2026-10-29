@@ -2,7 +2,6 @@
 // targets = correct tap circles, in image-width units: x 0..1 from the left, y = pixels-from-top / image width, r = radius.
 // Any tap inside any circle counts. No targets = the object is not in the picture.
 const EXAM_TITLE = 'Visual Attention Test';
-const EXAM_MINUTES = 15; // the clock starts when the student presses Start
 
 const OBJECTS = [
   { id: 'b2', object: 'bucket', img: 'img/bucket-2.png', targets: [{ x: 0.58, y: 0.27, r: 0.12 }] },
@@ -16,9 +15,16 @@ const OBJECTS = [
   { id: 'c3', object: 'cycle', img: 'img/cycle-3.png', targets: [{ x: 0.531, y: 0.308, r: 0.11 }] },
 ];
 
-const SHAPE_IMG = 'img/shape.jpg';
-// A, B, C are the hidden shapes (shape_A/B/C.png); the rest are decoys. The browser draws each id (see SHAPES in index.html).
-const SHAPE_OPTIONS = ['A', 'square', 'circle', 'B', 'triangle', 'star', 'hexagon', 'C', 'cross', 'pentagon', 'oval', 'trapezoid'];
-const SHAPE_ANSWER = ['A', 'B', 'C'];
+// Shape questions: each shows a drawing and the student taps the red shape hidden in it. Same three red options every time (shuffled per student).
+const SHAPES = [
+  { id: 's1', img: 'img/shape-1.png', answer: 'A' },
+  { id: 's2', img: 'img/shape-2.png', answer: 'B' },
+  { id: 's3', img: 'img/shape-3.png', answer: 'C' },
+];
+const SHAPE_OPTIONS = [
+  { id: 'A', img: 'img/red-a.png', name: 'diamond' },
+  { id: 'B', img: 'img/red-b.png', name: 'flag' },
+  { id: 'C', img: 'img/red-c.png', name: 'slanted box' },
+];
 
-module.exports = { EXAM_TITLE, EXAM_MINUTES, OBJECTS, SHAPE_IMG, SHAPE_OPTIONS, SHAPE_ANSWER };
+module.exports = { EXAM_TITLE, OBJECTS, SHAPES, SHAPE_OPTIONS };

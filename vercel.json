@@ -1,0 +1,4 @@
+{
+  "functions": { "api/[[]action].js": { "maxDuration": 30 } },
+  "crons": [{ "path": "/api/sync", "schedule": "0 0 * * *" }]
+}
