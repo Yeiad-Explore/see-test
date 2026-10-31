@@ -1,7 +1,7 @@
 // Every /api/<action> call lands here: a Vercel function, and also what server.js runs locally.
 // State lives in Supabase (see supabase/schema.sql); each step is one atomic database function.
 const crypto = require('crypto');
-const { EXAM_TITLE, OBJECTS, SHAPES, SHAPE_OPTIONS } = require('../questions');
+const { EXAM_TITLE, OBJECTS, SHAPES, SHAPE_OPTIONS, ILLUSIONS, NOTHING_ELSE } = require('../questions');
 
 const { SUPABASE_URL, SUPABASE_KEY, DB_SECRET, SCRIPT_URL, SCRIPT_SECRET = '', SHEET_LINK, EXAM_TZ = 'Asia/Dhaka' } = process.env;
 
@@ -61,7 +61,8 @@ const label = (q) => { const [, o, n] = q.img.match(/(\w+)-(\d+)/); return `${o[
 const ANSWERS = [['Question', 'Object', 'Correct answer', 'Tap area (picture width = 1)'],
   ...COLS.map((q) => [label(q), q.object, q.targets ? `Tap the ${q.object}` : `No ${q.object} (it is not in the picture)`,
     (q.targets || []).map((t) => `x ${t.x}, y ${t.y}, radius ${t.r}`).join('  or  ')]),
-  ...SHAPES.map((q, i) => [`Shape ${i + 1}`, 'hidden shape', `Red shape ${q.answer} (${SHAPE_OPTIONS.find((o) => o.id === q.answer).name})`, 'Tap the red shape hidden in the drawing'])];
+  ...SHAPES.map((q, i) => [`Shape ${i + 1}`, 'hidden shape', `Red shape ${q.answer} (${SHAPE_OPTIONS.find((o) => o.id === q.answer).name})`, 'Tap the red shape hidden in the drawing']),
+  ...ILLUSIONS.map((q, i) => [`Illusion ${i + 1}`, 'illusion', 'Not scored (no right answer)', `Choices: ${q.choices.join(' / ')} / ${NOTHING_ELSE}`])];
 
 function grade(a) {
   const cells = [];
@@ -77,11 +78,19 @@ function grade(a) {
   const sh = a.shapes && typeof a.shapes === 'object' && !Array.isArray(a.shapes) ? a.shapes : {};
   const shapeCells = SHAPES.map((q) => (!SHAPE_OPTIONS.some((o) => o.id === sh[q.id]) ? 'Not answered' : sh[q.id] === q.answer ? 'Correct' : 'Not correct'));
   const right = shapeCells.filter((c) => c === 'Correct').length, wrong = shapeCells.filter((c) => c === 'Not correct').length;
-  return { cells, shapeCells, right, wrong, objScore, total: objScore + right, max: OBJECTS.length + SHAPES.length };
+  // Illusions are not scored: three cells each (first answer, "what else" answer, hint opened).
+  const il = a.illusions && typeof a.illusions === 'object' && !Array.isArray(a.illusions) ? a.illusions : {};
+  const illusionCells = ILLUSIONS.flatMap((q) => {
+    const x = il[q.id] || {};
+    return [q.choices.includes(x.first) ? x.first : 'Not answered', [...q.choices, NOTHING_ELSE].includes(x.also) ? x.also : 'Not answered', x.hint === true ? 'Yes' : 'No'];
+  });
+  return { cells, shapeCells, illusionCells, right, wrong, objScore, total: objScore + right, max: OBJECTS.length + SHAPES.length };
 }
 
-const HEADER = ['Student ID', 'Logged in at', 'Started at', 'Submitted at', ...COLS.map(label), ...SHAPES.map((_, i) => `Shape ${i + 1}`),
-  'Shapes correct', 'Shapes not correct', 'Picture score', 'Shape score', 'Total', 'Out of', 'Time taken (s)', 'Ref'];
+// The illusion columns sit just before Ref so that sheets created before they existed keep their layout (Code.gs inserts them).
+const HEADER = ['Student ID', 'Student Name', 'Logged in at', 'Started at', 'Submitted at', ...COLS.map(label), ...SHAPES.map((_, i) => `Shape ${i + 1}`),
+  'Shapes correct', 'Shapes not correct', 'Picture score', 'Shape score', 'Total', 'Out of', 'Time taken (s)',
+  ...ILLUSIONS.flatMap((_, i) => [`Illusion ${i + 1} first`, `Illusion ${i + 1} also`, `Illusion ${i + 1} hint used`]), 'Ref'];
 
 module.exports = async (req, res) => {
   const action = req.query.action;
@@ -89,10 +98,13 @@ module.exports = async (req, res) => {
     if (action === 'sync') { await sync(); return json(res, 200, { ok: true }); } // safe to open: it only pushes pending results to the configured sheet
 
     if (action === 'login' && req.method === 'POST') {
-      const id = String((await readBody(req)).id || '').trim();
+      const body = await readBody(req);
+      const id = String(body.id || '').trim();
+      const name = String(body.name || '').replace(/\s+/g, ' ').trim();
       if (!/^[A-Za-z0-9_-]{3,32}$/.test(id)) return json(res, 400, { error: 'Enter your student ID (letters and numbers only).' });
+      if (name.length < 2 || name.length > 80) return json(res, 400, { error: 'Enter your full name.' });
       const token = `${id}.${Date.now()}.${crypto.randomBytes(16).toString('hex')}`;
-      if (!(await rpc('st_login', { p_id: id, p_token: token }))) return json(res, 403, { error: 'This ID has already logged in.' });
+      if (!(await rpc('st_login', { p_id: id, p_name: name, p_token: token }))) return json(res, 403, { error: 'This ID has already logged in.' });
       return json(res, 200, { token });
     }
 
@@ -107,17 +119,20 @@ module.exports = async (req, res) => {
       if (!s.startedAt) return json(res, 200, { notStarted: true });
       return json(res, 200, {
         title: EXAM_TITLE,
+        name: s.name || '',
         objects: OBJECTS.map(({ id, object, img }) => ({ id, object, img })),
         shapes: SHAPES.map(({ id, img }) => ({ id, img })),
         options: SHAPE_OPTIONS.map(({ id, img }) => ({ id, img })),
+        illusions: ILLUSIONS,
+        nothingElse: NOTHING_ELSE,
       });
     }
     if (action === 'submit' && req.method === 'POST') {
       if (!s.startedAt) return json(res, 400, { error: 'The test has not started.' });
       const g = grade(await readBody(req));
       const taken = Math.round((s.now - s.startedAt) / 1000); // no time limit; Late stays blank so the sheet columns keep their layout
-      const row = [id, time(s.at), time(s.startedAt), time(s.now), ...g.cells, ...g.shapeCells, g.right, g.wrong,
-        g.objScore, g.right, g.total, g.max, taken, 'r-' + token.split('.')[2].slice(0, 12)];
+      const row = [id, s.name || '', time(s.at), time(s.startedAt), time(s.now), ...g.cells, ...g.shapeCells, g.right, g.wrong,
+        g.objScore, g.right, g.total, g.max, taken, ...g.illusionCells, 'r-' + token.split('.')[2].slice(0, 12)];
       const r = await rpc('st_submit', { p_id: id, p_token: token, p_ref: row[row.length - 1], p_row: row });
       if (r !== 'ok') return json(res, r === 'submitted' ? 409 : 401, { error: 'Already submitted.' });
       try { await sync(); } catch (e) { console.error('sync failed', e.message); } // the answers are already safe in the database

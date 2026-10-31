@@ -27,4 +27,16 @@ const SHAPE_OPTIONS = [
   { id: 'C', img: 'img/red-c.png', name: 'slanted box' },
 ];
 
-module.exports = { EXAM_TITLE, OBJECTS, SHAPES, SHAPE_OPTIONS };
+// Illusion questions: not scored (no right answer). Each asks "what do you see first?" (one of choices), then "what else?" (a choice or "Nothing else").
+// The sheet records the choice text and whether the student opened the hint.
+const NOTHING_ELSE = 'Nothing else';
+const ILLUSIONS = [
+  { id: 'i1', img: 'img/illusion-1.png', choices: ['A young woman looking away', 'An old woman in a headscarf', 'A man wearing a hat'],
+    hint: "The young woman's ear becomes the old woman's eye, her jawline becomes the old woman's nose, and her choker becomes the old woman's mouth." },
+  { id: 'i2', img: 'img/illusion-2.png', choices: ['A duck', 'A rabbit', 'A cat'],
+    hint: "Both animals use the same lines. The duck's beak, pointing left, can turn into a rabbit's ears laid back, and then the rabbit looks to the right." },
+  { id: 'i3', img: 'img/illusion-3.png', choices: ['A tree', 'Two faces looking at each other', 'A vase or goblet'],
+    hint: 'Look at one colour at a time. The black shapes are two faces in profile; the white space between them forms one solid vase.' },
+];
+
+module.exports = { EXAM_TITLE, OBJECTS, SHAPES, SHAPE_OPTIONS, ILLUSIONS, NOTHING_ELSE };

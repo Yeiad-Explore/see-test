@@ -1,6 +1,6 @@
 # SeeTest
 
-Student ID login (one login per ID) → 9 "can you see it?" pictures → 3 shape questions → results in a Google Sheet.
+Name + student ID login (one login per ID) → 9 "can you see it?" pictures → 3 shape questions → 3 illusion questions → results in a Google Sheet.
 
 ## Run and deploy
 
@@ -29,8 +29,9 @@ The script writes only two tabs, created if missing: `SeeTest results` (one row 
 rewritten from `questions.js` on every send). Other tabs are left alone. After editing `Code.gs`, redeploy: Deploy → Manage deployments → Edit → New version.
 If the sheet isn't shared, the Vercel function log says so and the results stay safe in the database.
 
-Columns: Student ID, Logged in at, Started at, Submitted at, one column per picture and per shape (Correct / Not correct / Not answered),
-Shapes correct, Shapes not correct, Picture score, Shape score, Total, Out of, Time taken (s), Ref.
+Columns: Student ID, Student Name, Logged in at, Started at, Submitted at, one column per picture and per shape (Correct / Not correct / Not answered),
+Shapes correct, Shapes not correct, Picture score, Shape score, Total, Out of, Time taken (s), then per illusion: first answer, "also" answer, hint used (Yes/No), then Ref. Illusions are not scored (`ILLUSIONS` in `questions.js`, total stays out of 12).
+An existing sheet gets its header rewritten (and old rows' Ref moved to the new last column) on the next send, once the updated `Code.gs` is redeployed (Deploy > Manage deployments > Edit > New version).
 Ref is a submission code the script uses to avoid duplicate rows; don't edit it.
 
 ## Add the pictures

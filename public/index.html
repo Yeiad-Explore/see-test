@@ -52,6 +52,7 @@
   .grid .num { font-size:1.1rem; font-weight:800; }
   .grid img { width:100%; max-width:120px; aspect-ratio:1; object-fit:contain; background:#fff; border-radius:8px; pointer-events:none; }
   .grid button.on::after { content:"\2713"; position:absolute; top:4px; right:6px; font-weight:800; color:var(--accent); }
+  .choices { display:grid; gap:10px; }
   .rev { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:2px solid var(--line); }
   .rev span.no { color:var(--bad); font-weight:800; } .rev span.ok { color:var(--ink); font-weight:800; }
   .rev button { min-height:44px; padding:4px 16px; }
@@ -66,6 +67,7 @@
 <main id="app"></main>
 <script>
 const $ = (s) => document.querySelector(s);
+const esc = (t) => t.replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';');
 const app = $('#app');
 const KEY = 'seetest';
 // Each student sees the questions in their own order (seeded by ID, so a reload keeps it).
@@ -76,7 +78,7 @@ function rng(seed) {
 }
 const shuffle = (a, r) => { a = [...a]; for (let i = a.length; i > 1;) { const j = Math.floor(r() * i--); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
-let S = { token: null, cur: 0, answers: { objects: {}, shapes: {} } };
+let S = { token: null, cur: 0, answers: { objects: {}, shapes: {}, illusions: {} } };
 let Q, items, submitting = false;
 const store = (v) => { try { v === null ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, JSON.stringify(v)); } catch {} };
 const save = () => store({ token: S.token, cur: S.cur, answers: S.answers });
@@ -96,30 +98,34 @@ async function call(url, body) {
 function loginScreen(msg = '') {
   $('#hd').hidden = true;
   app.innerHTML = `<div class="card">
-    <h1>👋 Visual Attention Test</h1><p>Take your time. Enter your student ID to begin.</p>
+    <h1>👋 Visual Attention Test</h1><p>Take your time. Enter your name and student ID to begin.</p>
     <h2>Before you start</h2>
     <ul>
+      <li>Enter your <b>full name</b> and <b>student ID</b>, then log in.</li>
       <li>Press <b>Start</b> when you are ready.</li>
       <li>Each student ID can be used <b>only once</b>. If the page closes, open it again on the same device to carry on.</li>
       <li>9 picture questions: tap the object if you can see it. If it is not there, press “No …”.</li>
       <li>3 shape questions: tap the red shape that is hidden in the drawing.</li>
+      <li>3 illusion questions: say what you see first, then what else you can find. There is no right or wrong answer.</li>
       <li>You can go back and change an answer until you submit.</li>
     </ul>
-    <label for="id"><b>Student ID</b></label>
+    <label for="name"><b>Full name</b></label>
+    <input id="name" autocomplete="name" maxlength="80" placeholder="e.g. Anika Rahman">
+    <label for="id" style="display:block;margin-top:14px"><b>Student ID</b></label>
     <input id="id" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. 2301045">
     <p class="err" id="err" role="alert">${msg}</p>
     <button class="primary" id="go" style="width:100%">Log in</button></div>`;
-  $('#id').focus();
+  $('#name').focus();
   const go = async () => {
     $('#go').disabled = true;
     try {
-      S = { token: (await call('/api/login', { id: $('#id').value })).token, cur: 0, answers: { objects: {}, shapes: {} } };
+      S = { token: (await call('/api/login', { id: $('#id').value, name: $('#name').value })).token, cur: 0, answers: { objects: {}, shapes: {}, illusions: {} } };
       save();
       start();
     } catch (e) { loginScreen(e.message); }
   };
   $('#go').onclick = go;
-  $('#id').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  $('#name').onkeydown = $('#id').onkeydown = (e) => { if (e.key === 'Enter') go(); };
 }
 
 async function start() {
@@ -130,15 +136,17 @@ async function start() {
   if (Q.notStarted) return readyScreen(id);
   const r = rng(id);
   if (Array.isArray(S.answers.shapes)) S.answers.shapes = {}; // saved by an older version of the page
-  items = [...shuffle(Q.objects, r).map((q) => ({ q })), ...Q.shapes.map((q, n) => ({ shape: q, n: n + 1, options: shuffle(Q.options, r) }))];
-  $('#title').textContent = Q.title; $('#who').textContent = 'Student ID: ' + id; $('#hd').hidden = false;
+  S.answers.illusions = S.answers.illusions || {};
+  items = [...shuffle(Q.objects, r).map((q) => ({ q })), ...Q.shapes.map((q, n) => ({ shape: q, n: n + 1, options: shuffle(Q.options, r) })),
+    ...Q.illusions.map((q, n) => ({ illusion: q, n: n + 1 }))];
+  $('#title').textContent = Q.title; $('#who').textContent = (Q.name ? Q.name + ' · ' : '') + 'Student ID: ' + id; $('#hd').hidden = false;
   window.onbeforeunload = (e) => { if (!submitting) { e.preventDefault(); e.returnValue = ''; } };
   S.cur = Math.min(S.cur, items.length);
   render();
 }
 
 function readyScreen(id, msg = '') {
-  app.innerHTML = `<div class="card center"><h1>You are logged in</h1><p>Student ID: <b>${id}</b></p><p>Take your time. Press Start when you are ready.</p>
+  app.innerHTML = `<div class="card center"><h1>You are logged in</h1><p>${Q.name ? `<b>${esc(Q.name)}</b> · ` : ''}Student ID: <b>${id}</b></p><p>Take your time. Press Start when you are ready.</p>
     <p class="err" id="err" role="alert">${msg}</p>
     <button class="primary" id="begin" style="width:100%">Start test</button></div>`;
   $('#begin').onclick = async () => {
@@ -147,7 +155,7 @@ function readyScreen(id, msg = '') {
   };
 }
 
-const answered = (i) => items[i].shape ? !!S.answers.shapes[items[i].shape.id] : !!S.answers.objects[items[i].q.id];
+const answered = (i) => items[i].illusion ? !!(S.answers.illusions[items[i].illusion.id] || {}).first && !!S.answers.illusions[items[i].illusion.id].also : items[i].shape ? !!S.answers.shapes[items[i].shape.id] : !!S.answers.objects[items[i].q.id];
 const go = (i) => { S.cur = i; save(); render(); window.scrollTo(0, 0); };
 
 function navHtml() {
@@ -165,7 +173,7 @@ function render() {
     <div class="row"><button id="back" ${S.cur ? '' : 'disabled'}>Back</button>
     <button id="next" class="primary">${last ? 'Review answers' : 'Next'}</button></div></div>`;
   wireNav();
-  it.shape ? shapeQ(it) : objectQ(it.q);
+  it.illusion ? illusionQ(it) : it.shape ? shapeQ(it) : objectQ(it.q);
   $('#back').onclick = () => go(S.cur - 1);
   $('#next').onclick = () => go(S.cur + 1);
 }
@@ -209,6 +217,27 @@ function shapeQ(it) {
       save(); refreshNav();
     };
   });
+}
+
+function illusionQ(it) {
+  const q = it.illusion, a = () => S.answers.illusions[q.id] || (S.answers.illusions[q.id] = {});
+  const group = (key, title, list) => `<h2>${title}</h2><div class="choices" data-k="${key}">${list.map((c) => `<button aria-pressed="${a()[key] === c}" class="${a()[key] === c ? 'on' : ''}">${c}</button>`).join('')}</div>`;
+  $('#body').innerHTML = `<h1>Look at the picture</h1><p>Tap what you see first, then what else you can find.</p>
+    <div class="pic" style="cursor:default"><img src="${q.img}" alt="Picture for illusion ${it.n}" draggable="false"></div>
+    ${group('first', 'What do you see first?', q.choices)}${group('also', 'What else do you see?', [...q.choices, Q.nothingElse])}
+    <div class="row"><button id="hint">${a().hint ? 'Hide hint' : 'Need a hint?'}</button></div><p id="hinttext" ${a().hint ? '' : 'hidden'}>${q.hint}</p>`;
+  document.querySelectorAll('.choices').forEach((g) => g.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      a()[g.dataset.k] = b.textContent;
+      g.querySelectorAll('button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+      save(); refreshNav();
+    };
+  }));
+  $('#hint').onclick = () => {
+    const show = $('#hinttext').hidden;
+    $('#hinttext').hidden = !show; $('#hint').textContent = show ? 'Hide hint' : 'Need a hint?';
+    if (show) { a().hint = true; save(); } // once opened it stays recorded as used
+  };
 }
 
 function refreshNav() {

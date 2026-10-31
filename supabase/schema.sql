@@ -6,6 +6,7 @@ insert into config values ('api_key', 'CHANGE_ME');
 create table logins (
   id text primary key,                       -- the primary key is what makes "one login per ID" safe under 100 simultaneous logins
   token text not null,
+  name text,                                 -- the student's name, typed at login
   logged_in_at timestamptz not null default now(),
   started_at timestamptz,
   submitted boolean not null default false
@@ -29,11 +30,11 @@ begin
   end if;
 end $$;
 
-create function st_login(p_key text, p_id text, p_token text) returns boolean language plpgsql security definer set search_path = public as $$
+create function st_login(p_key text, p_id text, p_token text, p_name text) returns boolean language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
   perform st_check(p_key);
-  insert into logins (id, token) values (p_id, p_token) on conflict do nothing;
+  insert into logins (id, token, name) values (p_id, p_token, p_name) on conflict do nothing;
   get diagnostics n = row_count;
   return n = 1;
 end $$;
@@ -44,7 +45,7 @@ begin
   perform st_check(p_key);
   select * into l from logins where id = p_id and token = p_token;
   if not found then return jsonb_build_object('ok', false); end if;
-  return jsonb_build_object('ok', true, 'submitted', l.submitted,
+  return jsonb_build_object('ok', true, 'submitted', l.submitted, 'name', l.name,
     'at', (extract(epoch from l.logged_in_at) * 1000)::bigint,
     'startedAt', (extract(epoch from l.started_at) * 1000)::bigint,
     'now', (extract(epoch from clock_timestamp()) * 1000)::bigint);
@@ -89,7 +90,7 @@ begin
 end $$;
 
 revoke execute on function st_check(text) from public, anon, authenticated;
-revoke execute on function st_login(text, text, text), st_status(text, text, text), st_start(text, text, text),
+revoke execute on function st_login(text, text, text, text), st_status(text, text, text), st_start(text, text, text),
   st_submit(text, text, text, text, jsonb), st_claim(text, text, int), st_mark_sent(text, text[], text) from public, authenticated;
-grant execute on function st_login(text, text, text), st_status(text, text, text), st_start(text, text, text),
+grant execute on function st_login(text, text, text, text), st_status(text, text, text), st_start(text, text, text),
   st_submit(text, text, text, text, jsonb), st_claim(text, text, int), st_mark_sent(text, text[], text) to anon;
